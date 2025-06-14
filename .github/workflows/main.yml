@@ -1,0 +1,112 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: wulan17/debian-aarch64:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          repository: ValveSoftware/wine
+          ref: proton_10.0
+
+      - name: Setup multiarch
+        run: |
+          dpkg --add-architecture armhf
+          apt update
+
+      - name: Install dependencies
+        run: |
+          apt install -y \
+            build-essential \
+            git \
+            wget \
+            curl \
+            python3 \
+            python3-pip \
+            python3-venv \
+            flex \
+            bison \
+            libfreetype6-dev:armhf \
+            libgl1-mesa-dev:armhf \
+            libgl1-mesa-glx:armhf \
+            libglvnd-dev:armhf \
+            libx11-dev:armhf \
+            libxext-dev:armhf \
+            libfreetype6-dev \
+            libgl1-mesa-dev \
+            libgl1-mesa-glx \
+            libglvnd-dev \
+            libx11-dev \
+            libxext-dev \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            libxml2-dev \
+            libxslt1-dev \
+            libcap-dev \
+
+      - name: Install Wine dependencies
+        run: |
+          apt install -y \
+            libasound2-dev:armhf \
+            libdbus-1-dev:armhf \
+            libfontconfig1-dev:armhf \
+            libfreetype6-dev:armhf \
+            libgl1-mesa-glx:armhf \
+            libgl1-mesa-dri:armhf \
+            libglu1-mesa-dev:armhf \
+            libgstreamer1.0-dev:armhf \
+            libpulse-dev:armhf \
+            libssl-dev:armhf \
+            libdrm-dev:armhf \
+            libasound2-dev \
+            libdbus-1-dev \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libgl1-mesa-glx \
+            libgl1-mesa-dri \
+            libglu1-mesa-dev \
+            libgstreamer1.0-dev \
+            libpulse-dev \
+            libssl-dev \
+            libdrm-dev
+
+      - name: Build Wine
+        run: |
+          export CC=clang
+          export CXX=clang++
+          export AR=llvm-ar
+          export RANLIB=llvm-ranlib
+          export STRIP=llvm-strip
+          export READELF=llvm-readelf
+          export NM=llvm-nm
+          export OBJCOPY=llvm-objcopy
+          export OBJDUMP=llvm-objdump
+          export CFLAGS="-O2 -pipe -march=armv8-a+crc+crypto"
+          export CXXFLAGS="-O2 -pipe -march=armv8-a+crc+crypto"
+          export LDFLAGS="-Wl,-O1 -Wl,--hash-style=gnu -Wl,--as-needed -flto=thin -fuse-ld=lld"
+          ./autogen.sh
+          ./configure --enable-win64 --enable-win32
+          make -j$(nproc)
+          make DESTDIR=install install
+
+      - name: Package Wine
+        run: |
+          mkdir -p dist
+          tar -cJf dist/wine-aarch64.tar.xz -C install .
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.run_id }}
+          files: dist/wine-aarch64.tar.xz
+          name: random_build-${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
