@@ -1,0 +1,221 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-box64:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: wulan17/debian-aarch64:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          apt update && apt upgrade -y
+          apt install -y \
+            build-essential \
+            cmake \
+            file \
+            gperf \
+            zlib1g-dev \
+            libssl-dev \
+            binutils-x86-64-linux-gnu
+
+      - name: Checkout box64
+        uses: actions/checkout@v4
+        with:
+          repository: ptitSeb/box64
+          ref: main
+
+      - name: Configure build
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_C_COMPILER=$(which clang) \
+            -DCMAKE_CXX_COMPILER=$(which clang++) \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS_RELEASE="-flto=thin" \
+            -DCMAKE_CXX_FLAGS_RELEASE="-flto=thin" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" \
+            -DCMAKE_INSTALL_PREFIX=/opt/box64 \
+            -DARM_DYNAREC=ON \
+            ..
+
+      - name: Build box64
+        run: |
+          cd build
+          make -j$(nproc)
+          make install DESTDIR=$(pwd)/../dist
+
+      - name: Strip binaries
+        run: |
+          # handle filenames with spaces/newlines safely
+          find dist -type f -print0 | while IFS= read -r -d '' f; do
+            if file "$f" | grep -qi 'aarch64' && file "$f" | grep -qi 'not stripped'; then
+              strip -s "$f" || true
+            fi
+            if file "$f" | grep -qi 'x86-64' && file "$f" | grep -qi 'not stripped'; then
+              x86_64-linux-gnu-strip -s "$f" || true
+            fi
+          done
+
+      - name: Compress dist directory
+        run: |
+          tar -cJf box64-${{ github.run_id }}-aarch64.tar.xz -C dist .
+
+      - name: Upload to Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.run_id }}
+          files: |
+            box64-${{ github.run_id }}-aarch64.tar.xz
+          name: box64-${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-box86-generic:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: wulan17/debian-aarch64:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          apt update && apt upgrade -y
+          apt install -y \
+            build-essential \
+            cmake \
+            file \
+            gperf \
+            zlib1g-dev \
+            libssl-dev \
+            binutils-x86-64-linux-gnu \
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            gcc \
+            g++ \
+            binutils
+
+      - name: Checkout box86
+        uses: actions/checkout@v4
+        with:
+          repository: ptitSeb/box86
+          ref: master
+
+      - name: Configure build
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX=/opt/box86 \
+            -DARM_DYNAREC=ON \
+            -DARM64=1 \
+            ..
+
+      - name: Build box86
+        run: |
+          cd build
+          make -j$(nproc)
+          make install DESTDIR=$(pwd)/../dist
+
+      - name: Strip binaries
+        run: |
+          # handle filenames with spaces/newlines safely
+          find dist -type f -print0 | while IFS= read -r -d '' f; do
+            if file "$f" | grep -qi 'aarch64' && file "$f" | grep -qi 'not stripped'; then
+              strip -s "$f" || true
+            fi
+            if file "$f" | grep -qi 'x86-64' && file "$f" | grep -qi 'not stripped'; then
+              x86_64-linux-gnu-strip -s "$f" || true
+            fi
+          done
+
+      - name: Compress dist directory
+        run: |
+          tar -cJf box86-${{ github.run_id }}-generic.tar.xz -C dist .
+
+      - name: Upload to Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.run_id }}
+          files: |
+            box86-${{ github.run_id }}-generic.tar.xz
+          name: box86-${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-box86-adlink:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: wulan17/debian-aarch64:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          apt update && apt upgrade -y
+          apt install -y \
+            build-essential \
+            cmake \
+            file \
+            gperf \
+            zlib1g-dev \
+            libssl-dev \
+            binutils-x86-64-linux-gnu \
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            binutils-arm-linux-gnueabihf \
+            gcc \
+            g++ \
+            binutils
+
+      - name: Checkout box86
+        uses: actions/checkout@v4
+        with:
+          repository: ptitSeb/box86
+          ref: master
+
+      - name: Configure build
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX=/opt/box86 \
+            -DARM_DYNAREC=ON \
+            -DADLINK=1 \
+            ..
+
+      - name: Build box86
+        run: |
+          cd build
+          make -j$(nproc)
+          make install DESTDIR=$(pwd)/../dist
+
+      - name: Strip binaries
+        run: |
+          # handle filenames with spaces/newlines safely
+          find dist -type f -print0 | while IFS= read -r -d '' f; do
+            if file "$f" | grep -qi 'aarch64' && file "$f" | grep -qi 'not stripped'; then
+              strip -s "$f" || true
+            fi
+            if file "$f" | grep -qi 'x86-64' && file "$f" | grep -qi 'not stripped'; then
+              x86_64-linux-gnu-strip -s "$f" || true
+            fi
+          done
+
+      - name: Compress dist directory
+        run: |
+          tar -cJf box86-${{ github.run_id }}-adlink.tar.xz -C dist .
+
+      - name: Upload to Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.run_id }}
+          files: |
+            box86-${{ github.run_id }}-adlink.tar.xz
+          name: box86-${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
