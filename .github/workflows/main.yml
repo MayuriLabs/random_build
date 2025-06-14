@@ -1,0 +1,126 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-aarch64:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: wulan17/debian-aarch64:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          apt update && apt upgrade -y
+          apt install -y \
+            build-essential \
+            cmake \
+            file \
+            gperf \
+            zlib1g-dev \
+            libssl-dev
+
+      - name: Checkout tdlib
+        uses: actions/checkout@v4
+        with:
+          repository: tdlib/td
+          ref: master
+
+      - name: Configure build
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_C_COMPILER=$(which clang) \
+            -DCMAKE_CXX_COMPILER=$(which clang++) \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS_RELEASE="-flto=thin" \
+            -DCMAKE_CXX_FLAGS_RELEASE="-flto=thin" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" ..
+
+      - name: Build tdlib
+        run: |
+          cd build
+          cmake --build . --parallel $(nproc --all)
+          cmake --install . --prefix ../dist
+
+      - name: Strip binaries
+        run: |
+          for f in $(find dist -type f -exec file {} \; | grep 'not stripped' | cut -d: -f1); do
+            strip -s "$f"
+          done
+
+      - name: Compress dist directory
+        run: |
+          tar -cJf tdlib-${{ github.run_id }}-aarch64.tar.xz -C dist .
+
+      - name: Upload to Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.run_id }}
+          files: tdlib-${{ github.run_id }}-aarch64.tar.xz
+          name: tdlib-${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-amd64:
+    if: false
+    runs-on: ubuntu-24.04
+    container:
+      image: wulan17/debian:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          apt update && apt upgrade -y
+          apt install -y \
+            build-essential \
+            cmake \
+            file \
+            gperf \
+            zlib1g-dev \
+            libssl-dev
+
+      - name: Checkout tdlib
+        uses: actions/checkout@v4
+        with:
+          repository: tdlib/td
+          ref: master
+
+      - name: Configure build
+        run: |
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_C_COMPILER=$(which clang) \
+            -DCMAKE_CXX_COMPILER=$(which clang++) \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS_RELEASE="-flto=thin" \
+            -DCMAKE_CXX_FLAGS_RELEASE="-flto=thin" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" ..
+
+      - name: Build tdlib
+        run: |
+          cd build
+          cmake --build . --parallel $(nproc --all)
+          cmake --install . --prefix ../dist
+
+      - name: Strip binaries
+        run: |
+          for f in $(find dist -type f -exec file {} \; | grep 'not stripped' | cut -d: -f1); do
+            strip -s "$f"
+          done
+
+      - name: Compress dist directory
+        run: |
+          tar -cJf tdlib-${{ github.run_id }}-amd64.tar.xz -C dist .
+
+      - name: Upload to Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.run_id }}
+          files: tdlib-${{ github.run_id }}-amd64.tar.xz
+          name: tdlib-${{ github.run_id }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
